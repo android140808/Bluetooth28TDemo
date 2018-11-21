@@ -105,6 +105,11 @@ public enum Bluetooth28TUtils {
         }
     };
 
+    public void sendtSmallDatas(byte[] data) {
+        mBlueTooth28TService.sendSmallDatas(data);
+    }
+
+
     public void onDestroy() {
 
     }

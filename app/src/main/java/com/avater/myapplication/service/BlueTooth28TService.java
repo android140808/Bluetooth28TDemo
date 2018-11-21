@@ -47,11 +47,13 @@ public class BlueTooth28TService extends Service {
     private UUID UUID_CHARACTERISTIC_8005 = UUID.fromString("00008005-0000-1000-8000-00805f9b34fb");
     private UUID UUID_SERVICE_EXTEND = UUID.fromString("00007006-0000-1000-8000-00805f9b34fb");
     private UUID UUID_CHARACTERISTIC_8002 = UUID.fromString("00008002-0000-1000-8000-00805f9b34fb");
+    private UUID UUID_CHARACTERISTIC_8001 = UUID.fromString("00008001-0000-1000-8000-00805f9b34fb");
     public LinkedList<NotificationInfo> notifications = new LinkedList<>();
     private boolean isSupportRemoteService = false;                                                 // 是否支持远程服务
     private boolean is8003Server7006 = true;
     private final IBinder mBinder = new MyBinder();
     private boolean isConnect = false;
+    private BluetoothDevice mBluetoothDevice;
 
     @Override
     public void onCreate() {
@@ -203,23 +205,48 @@ public class BlueTooth28TService extends Service {
         }
     };
 
+    public void sendSmallDatas(byte data[]) {
+        Le("发送小字节的数据");
+        if (null == data) {
+            return;
+        }
+        if (mBluetoothDevice != null && mBluetoothGatt != null) {
+            BluetoothGattCharacteristic bgc = null;
+            try {
+                bgc = mBluetoothGatt.getService(UUID_SERVICE_BASE).getCharacteristic(UUID_CHARACTERISTIC_8001);
+                bgc.setValue(data);
+            } catch (Exception e) {
+                Le("出现异常");
+                e.printStackTrace();
+            }
+            try {
+                bgc.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+                mBluetoothGatt.writeCharacteristic(bgc);
+            } catch (Exception e) {
+                Le("出现异常");
+                e.printStackTrace();
+            }
+        }
+
+    }
+
     public boolean connect(String macAddress) {
-        BluetoothDevice bluetoothDevice = null;
         Log.d("connect--", "--");
         try {
             Log.d("connect--", "--根据Mac在蓝牙适配器中获取该对象");
-            bluetoothDevice = mBluetoothAdapter.getRemoteDevice(macAddress);
+            this.mBluetoothDevice = mBluetoothAdapter.getRemoteDevice(macAddress);
+
         } catch (IllegalArgumentException e) {
             Log.d("connect--", "--根据Mac在蓝牙出现异常");
             e.printStackTrace();
             return false;
         }
-        if (mBluetoothAdapter == null || bluetoothDevice == null) {
+        if (mBluetoothAdapter == null || mBluetoothDevice == null) {
             Log.d("connect--", "--根据Mac获取蓝牙对象失败，返回");
             return false;
         } else {
             Log.d("connect--", "--根据Mac在蓝牙获取成功！！");
-            if (bluetoothDevice != null && !TextUtils.isEmpty(macAddress)) {
+            if (mBluetoothDevice != null && !TextUtils.isEmpty(macAddress)) {
                 Log.d("connect--", "--");
                 Set<BluetoothDevice> bluetoothDeviceSet = mBluetoothAdapter.getBondedDevices();
                 boolean isPair = false;
@@ -244,7 +271,7 @@ public class BlueTooth28TService extends Service {
 //                    Log.e("connect--", "--进行配对");
 //                    bluetoothDevice.createBond();
 //                }
-                mBluetoothGatt = bluetoothDevice.connectGatt(BlueTooth28TService.this, Build.VERSION.SDK_INT < 19, gattCallback);
+                mBluetoothGatt = mBluetoothDevice.connectGatt(BlueTooth28TService.this, Build.VERSION.SDK_INT < 19, gattCallback);
                 return true;
             } else {
                 Log.d("connect--", "--");
@@ -350,4 +377,13 @@ public class BlueTooth28TService extends Service {
             this.characteristic = characteristic;
         }
     }
+
+    private void Ld(String msg) {
+        Log.e("TAG", "" + msg);
+    }
+
+    private void Le(String msg) {
+        Log.d("TAG", "" + msg);
+    }
+
 }

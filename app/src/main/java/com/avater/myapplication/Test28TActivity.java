@@ -71,6 +71,7 @@ public class Test28TActivity extends Activity implements ScanDeviceInterface, Ad
                 Bluetooth28TUtils.INSTANCE.startScan();
                 break;
             case R.id.btn_bind:
+                Bluetooth28TUtils.INSTANCE.sendtSmallDatas(new byte[]{0x6E, 0x01, 0x03, 0x02, (byte) 0x8F});
                 break;
             case R.id.btn_stop:
                 Bluetooth28TUtils.INSTANCE.stopScan();
