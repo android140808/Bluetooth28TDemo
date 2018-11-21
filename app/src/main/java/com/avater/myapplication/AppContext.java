@@ -2,6 +2,9 @@ package com.avater.myapplication;
 
 import android.content.Context;
 
+/**
+ * 增加注释
+ */
 public enum AppContext {
     INSTANCE;
     private Context mContext;
