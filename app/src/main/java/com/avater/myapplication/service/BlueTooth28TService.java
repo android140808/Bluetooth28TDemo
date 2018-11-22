@@ -22,6 +22,8 @@ import android.util.Log;
 
 import com.avater.myapplication.AppContext;
 import com.avater.myapplication.utils.BluetoothCommandConstant;
+import com.avater.myapplication.utils.Logger;
+import com.avater.myapplication.utils.NumberUtils;
 
 import java.lang.reflect.Method;
 import java.util.LinkedList;
@@ -53,6 +55,12 @@ public class BlueTooth28TService extends Service {
     private boolean is8003Server7006 = true;
     private final IBinder mBinder = new MyBinder();
     private boolean isConnect = false;
+    private byte[] lastPacket = null; // 是否保存还有上一个包的信息（分包发送的第一个包—）。
+    private byte[] sendLargePacket = null;   //分包发送数据的数据包
+    private byte largePacketID = 0;         //当前分包发送的命令特征字==命名码 ，用来匹配返回结果处理
+    public static int MAX_PACKET_SIZE = 20;
+    private boolean isWriteDataIng = false;// 是否正在写数据
+    private boolean isSend03 = false;
     private BluetoothDevice mBluetoothDevice;
 
     @Override
@@ -90,6 +98,66 @@ public class BlueTooth28TService extends Service {
         }
     }
 
+    public void writeDataToCharateristic1(byte abyte0[]) {
+        if (abyte0 == null)
+            return;
+        if (true) {
+            isSend03 = true;
+        }
+        Logger.d("", "28T 绑定流程 BluetoothLeService send: " + NumberUtils.binaryToHexString(abyte0));
+
+        if (mBluetoothGatt != null) {
+            Logger.d(TAG, ">>>> write data to characteristic11111111..."
+                    + new Object[0]);
+            Logger.d("", "28T 绑定流程 BluetoothLeService write date to characteristic 111...");
+            BluetoothGattCharacteristic bluetoothgattcharacteristic = null;
+            try {
+                bluetoothgattcharacteristic = mBluetoothGatt.getService(
+                        UUID_SERVICE_BASE).getCharacteristic(UUID_CHARACTERISTIC_8001);
+                bluetoothgattcharacteristic.setValue(abyte0);
+            } catch (Exception e) {
+            }
+            try {
+                isWriteDataIng = true;
+                Logger.d("", "28T 绑定流程 BluetoothLeService 正在发送的命令是：" + NumberUtils.binaryToHexString(abyte0));
+                if (abyte0[2] == (byte) 0xB2 || abyte0[2] == (byte) 0xB3) {
+                    Logger.i("test-mypush", "正在发送命令:" + NumberUtils.binaryToHexString(abyte0));
+                }
+                bluetoothgattcharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+                mBluetoothGatt.writeCharacteristic(bluetoothgattcharacteristic);
+            } catch (Exception e) {
+            }
+        }
+    }
+
+    private void filterBleData(byte[] bytes) {
+        if ((sendLargePacket != null) && (sendLargePacket.length > 0) &&
+                bytes.length == 6 && bytes[0] == 0x6e && bytes[1] == 0x01 && bytes[3] == largePacketID && bytes[4] == 5) {
+            int sendSize = (sendLargePacket.length <= MAX_PACKET_SIZE) ? sendLargePacket.length : MAX_PACKET_SIZE;
+            byte[] sendByte = new byte[sendSize];          //下面继续发送下一包
+            System.arraycopy(sendLargePacket, 0, sendByte, 0, sendSize);
+            writeDataToCharateristic1(sendByte);
+            Logger.d(TAG, " continue send other bytes:  :" + NumberUtils.binaryToHexString(sendByte));
+            Logger.d("", "28T 绑定流程 BluetoothLeService continur send other bytes:" + NumberUtils.binaryToHexString(sendByte));
+            if (sendLargePacket.length == sendSize) {
+                sendLargePacket = null;  //已经发完
+                Logger.d(TAG, " send out!");
+                Logger.d("", "28T 绑定流程 BluetoothLeService send out!");
+            } else {
+                byte[] tempByte = new byte[sendLargePacket.length - sendSize];
+                System.arraycopy(sendLargePacket, sendSize, tempByte, 0, sendLargePacket.length - sendSize); //保存后面未发送的数据
+                sendLargePacket = null;
+                sendLargePacket = new byte[tempByte.length];
+                System.arraycopy(tempByte, 0, sendLargePacket, 0, tempByte.length); //保存后面未发送的数据
+                Logger.d("", "28T 绑定流程 BluetoothLeService Not sendOut!remain bytes:" + NumberUtils.binaryToHexString(sendLargePacket));
+                Logger.d(TAG, " Not send Out!   remain bytes:  :" + NumberUtils.binaryToHexString(sendLargePacket));
+            }
+
+
+        } else {
+//            broadcastUpdate(ACTION_DATA_AVAILABLE, bytes);
+        }
+    }
 
     private BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         // 连接：状态回调
@@ -152,6 +220,44 @@ public class BlueTooth28TService extends Service {
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
             Log.e(TAG, "==>>onCharacteristicChanged( )");
+            if (mBluetoothGatt == null) {
+                return;
+            }
+            byte value[] = characteristic.getValue();
+            Object object[] = new Object[3];
+            object[0] = characteristic.getUuid();
+            String s, s1;
+            if (value != null) {
+                s = new String(value);
+                s1 = new String(value);
+            } else {
+                s = "NULL";
+                s1 = "NULL";
+            }
+            object[1] = s;
+            object[2] = s1;
+            if (UUID_CHARACTERISTIC_8002.equals(characteristic.getUuid())) {
+                if (lastPacket != null) {
+                    byte[] newbyte = new byte[20 + value.length];
+                    System.arraycopy(lastPacket, 0, newbyte, 0, 20);
+                    System.arraycopy(value, 0, newbyte, 20, value.length);
+//                    broadcastUpdate(ACTION_DATA_AVAILABLE, newbyte);
+                    lastPacket = null;
+                } else {
+                    if ((value != null) & (value.length == 20)) {
+                        if ((value[0] == 0x6e) && (value[1] == 0x01)  //L28H 有2个命令需要分包处理
+//								&& ( (abyte0[2] == 0x04) || (abyte0[2] == 0x05)   )) {
+                                && ((value[2] == 0x03) || (value[2] == 0x04) || (value[2] == 0x05))) {
+                            lastPacket = new byte[20];
+                            System.arraycopy(value, 0, lastPacket, 0, 20);
+                            return;
+                        }
+                    } else {
+                        lastPacket = null;
+                    }
+                    filterBleData(value);
+                }
+            }
         }
 
         // 连接：连接完成
@@ -205,48 +311,24 @@ public class BlueTooth28TService extends Service {
         }
     };
 
-    public void sendSmallDatas(byte data[]) {
-        Le("发送小字节的数据");
-        if (null == data) {
-            return;
-        }
-        if (mBluetoothDevice != null && mBluetoothGatt != null) {
-            BluetoothGattCharacteristic bgc = null;
-            try {
-                bgc = mBluetoothGatt.getService(UUID_SERVICE_BASE).getCharacteristic(UUID_CHARACTERISTIC_8001);
-                bgc.setValue(data);
-            } catch (Exception e) {
-                Le("出现异常");
-                e.printStackTrace();
-            }
-            try {
-                bgc.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
-                mBluetoothGatt.writeCharacteristic(bgc);
-            } catch (Exception e) {
-                Le("出现异常");
-                e.printStackTrace();
-            }
-        }
-
-    }
-
     public boolean connect(String macAddress) {
+        BluetoothDevice bluetoothDevice = null;
         Log.d("connect--", "--");
         try {
             Log.d("connect--", "--根据Mac在蓝牙适配器中获取该对象");
-            this.mBluetoothDevice = mBluetoothAdapter.getRemoteDevice(macAddress);
-
+            bluetoothDevice = mBluetoothAdapter.getRemoteDevice(macAddress);
+            mBluetoothDevice = mBluetoothAdapter.getRemoteDevice(macAddress);
         } catch (IllegalArgumentException e) {
             Log.d("connect--", "--根据Mac在蓝牙出现异常");
             e.printStackTrace();
             return false;
         }
-        if (mBluetoothAdapter == null || mBluetoothDevice == null) {
+        if (mBluetoothAdapter == null || bluetoothDevice == null) {
             Log.d("connect--", "--根据Mac获取蓝牙对象失败，返回");
             return false;
         } else {
             Log.d("connect--", "--根据Mac在蓝牙获取成功！！");
-            if (mBluetoothDevice != null && !TextUtils.isEmpty(macAddress)) {
+            if (bluetoothDevice != null && !TextUtils.isEmpty(macAddress)) {
                 Log.d("connect--", "--");
                 Set<BluetoothDevice> bluetoothDeviceSet = mBluetoothAdapter.getBondedDevices();
                 boolean isPair = false;
@@ -271,7 +353,7 @@ public class BlueTooth28TService extends Service {
 //                    Log.e("connect--", "--进行配对");
 //                    bluetoothDevice.createBond();
 //                }
-                mBluetoothGatt = mBluetoothDevice.connectGatt(BlueTooth28TService.this, Build.VERSION.SDK_INT < 19, gattCallback);
+                mBluetoothGatt = bluetoothDevice.connectGatt(BlueTooth28TService.this, Build.VERSION.SDK_INT < 19, gattCallback);
                 return true;
             } else {
                 Log.d("connect--", "--");
@@ -377,13 +459,4 @@ public class BlueTooth28TService extends Service {
             this.characteristic = characteristic;
         }
     }
-
-    private void Ld(String msg) {
-        Log.e("TAG", "" + msg);
-    }
-
-    private void Le(String msg) {
-        Log.d("TAG", "" + msg);
-    }
-
 }
