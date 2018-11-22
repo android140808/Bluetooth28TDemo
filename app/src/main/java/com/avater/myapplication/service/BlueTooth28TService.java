@@ -89,6 +89,27 @@ public class BlueTooth28TService extends Service {
         return mBinder;
     }
 
+    public void sendSmallDatas(byte[] data) {
+        if (data == null) {
+            return;
+        }
+        if (mBluetoothDevice != null && mBluetoothGatt != null) {
+            BluetoothGattCharacteristic bgc = null;
+            try {
+                bgc = mBluetoothGatt.getService(UUID_SERVICE_BASE).getCharacteristic(UUID_CHARACTERISTIC_8001);
+                bgc.setValue(data);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            try {
+                bgc.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+                mBluetoothGatt.writeCharacteristic(bgc);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
     /**
      * 获取Service实例
      */
@@ -152,9 +173,9 @@ public class BlueTooth28TService extends Service {
                 Logger.d("", "28T 绑定流程 BluetoothLeService Not sendOut!remain bytes:" + NumberUtils.binaryToHexString(sendLargePacket));
                 Logger.d(TAG, " Not send Out!   remain bytes:  :" + NumberUtils.binaryToHexString(sendLargePacket));
             }
-
-
+            Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(bytes));
         } else {
+            Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(bytes));
 //            broadcastUpdate(ACTION_DATA_AVAILABLE, bytes);
         }
     }
@@ -242,6 +263,7 @@ public class BlueTooth28TService extends Service {
                     System.arraycopy(lastPacket, 0, newbyte, 0, 20);
                     System.arraycopy(value, 0, newbyte, 20, value.length);
 //                    broadcastUpdate(ACTION_DATA_AVAILABLE, newbyte);
+                    Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(value));
                     lastPacket = null;
                 } else {
                     if ((value != null) & (value.length == 20)) {
@@ -255,6 +277,7 @@ public class BlueTooth28TService extends Service {
                     } else {
                         lastPacket = null;
                     }
+                    Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(value));
                     filterBleData(value);
                 }
             }
