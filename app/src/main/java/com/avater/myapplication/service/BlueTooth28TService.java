@@ -21,9 +21,12 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.avater.myapplication.AppContext;
+import com.avater.myapplication.eventbus.ParseDatas;
 import com.avater.myapplication.utils.BluetoothCommandConstant;
 import com.avater.myapplication.utils.Logger;
 import com.avater.myapplication.utils.NumberUtils;
+
+import org.greenrobot.eventbus.EventBus;
 
 import java.lang.reflect.Method;
 import java.util.LinkedList;
@@ -102,6 +105,7 @@ public class BlueTooth28TService extends Service {
                 e.printStackTrace();
             }
             try {
+                Logger.i("", "发送的数据 == " + NumberUtils.binaryToHexString(data));
                 bgc.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
                 mBluetoothGatt.writeCharacteristic(bgc);
             } catch (Exception e) {
@@ -205,6 +209,8 @@ public class BlueTooth28TService extends Service {
                 // TODO: 2018/11/21  继续连接
             } else if (status == 8 && newState == 0) {
 
+            } else if (status == 19 && newState == 0) {
+
             } else if (newState == 2 && status == 0) {//已经连接
                 Log.e(TAG, "==>>1.已经连接");
                 isConnect = true;
@@ -245,25 +251,14 @@ public class BlueTooth28TService extends Service {
                 return;
             }
             byte value[] = characteristic.getValue();
-            Object object[] = new Object[3];
-            object[0] = characteristic.getUuid();
-            String s, s1;
-            if (value != null) {
-                s = new String(value);
-                s1 = new String(value);
-            } else {
-                s = "NULL";
-                s1 = "NULL";
-            }
-            object[1] = s;
-            object[2] = s1;
             if (UUID_CHARACTERISTIC_8002.equals(characteristic.getUuid())) {
                 if (lastPacket != null) {
                     byte[] newbyte = new byte[20 + value.length];
                     System.arraycopy(lastPacket, 0, newbyte, 0, 20);
                     System.arraycopy(value, 0, newbyte, 20, value.length);
+                    Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(newbyte));
 //                    broadcastUpdate(ACTION_DATA_AVAILABLE, newbyte);
-                    Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(value));
+                    parseComingDatas(newbyte);
                     lastPacket = null;
                 } else {
                     if ((value != null) & (value.length == 20)) {
@@ -272,14 +267,33 @@ public class BlueTooth28TService extends Service {
                                 && ((value[2] == 0x03) || (value[2] == 0x04) || (value[2] == 0x05))) {
                             lastPacket = new byte[20];
                             System.arraycopy(value, 0, lastPacket, 0, 20);
+                            Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(value));
                             return;
                         }
                     } else {
                         lastPacket = null;
                     }
                     Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(value));
-                    filterBleData(value);
+//                    filterBleData(value);
+                    parseComingDatas(value);
                 }
+            }
+        }
+
+        private void parseComingDatas(byte[] data) {
+            if (data.length >= 20) {//大字节数据
+                if (data[0] == 0x6E && data[19] == 0x8F) {//刚好20个字节的数据
+                    EventBus.getDefault().post(new ParseDatas(data));
+                } else {
+                    byte last = data[data.length - 1];
+                    if (last == 0x8F) {
+                        EventBus.getDefault().post(new ParseDatas(data));
+                    } else {
+                        Logger.d("", "大字节数据还没有接收完毕，将继续接收");
+                    }
+                }
+            } else {//小字节数据
+                EventBus.getDefault().post(new ParseDatas(data));
             }
         }
 

@@ -28,4 +28,6 @@ dependencies {
     implementation "com.jakewharton:butterknife:8.4.0"
     annotationProcessor "com.jakewharton:butterknife-compiler:8.4.0"
     implementation 'com.android.support:multidex:1.0.0'
+    // 子模块(bluetooth)用到的第三方eventbus
+    implementation 'org.greenrobot:eventbus:3.0.0'
 }

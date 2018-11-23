@@ -18,9 +18,15 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 
+import com.avater.myapplication.eventbus.ParseDatas;
 import com.avater.myapplication.interfaces.ScanDeviceInterface;
 import com.avater.myapplication.service.Bluetooth28TUtils;
 import com.avater.myapplication.utils.Logger;
+import com.avater.myapplication.utils.NumberUtils;
+
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +47,10 @@ public class Test28TActivity extends Activity implements ScanDeviceInterface, Ad
     Button btnBind;
     @BindView(R.id.btn_stop)
     Button btnStop;
+    @BindView(R.id.btn_get_soft)
+    Button btnGetSoft;
+    @BindView(R.id.btn_get_id)
+    Button btnGetID;
     private List<Device> list;
     private MyAdapter adapter;
 
@@ -49,6 +59,7 @@ public class Test28TActivity extends Activity implements ScanDeviceInterface, Ad
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_test28_t);
         ButterKnife.bind(this);
+        EventBus.getDefault().register(this);
         Bluetooth28TUtils.INSTANCE.initContext(this);
         Bluetooth28TUtils.INSTANCE.setScanDeviceListener(this);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -64,17 +75,31 @@ public class Test28TActivity extends Activity implements ScanDeviceInterface, Ad
         listview.setOnItemClickListener(this);
     }
 
-    @OnClick({R.id.btn_search, R.id.btn_bind, R.id.btn_stop})
+    @OnClick({R.id.btn_search, R.id.btn_bind, R.id.btn_stop, R.id.btn_get_soft, R.id.btn_get_id})
     public void onViewClicked(View view) {
         switch (view.getId()) {
             case R.id.btn_search:
                 Bluetooth28TUtils.INSTANCE.startScan();
                 break;
-            case R.id.btn_bind:
-                Bluetooth28TUtils.INSTANCE.sendtSmallDatas(new byte[]{0x6E, 0x01, 0x03, 0x02, (byte) 0x8F});
-                break;
             case R.id.btn_stop:
                 Bluetooth28TUtils.INSTANCE.stopScan();
+                break;
+            case R.id.btn_get_soft:
+                Bluetooth28TUtils.INSTANCE.sendtSmallDatas(new byte[]{0x6E, 0x01, 0x03, 0x03, (byte) 0x8F});//软件版本
+                break;
+            case R.id.btn_bind:
+                byte[] bytes = null;
+                int userId = 1234;
+                NumberUtils.intToByteArray(userId);
+                bytes = new byte[]{0x6e, 0x01, (byte) 0x4a, 0x01, 0x00, 0x00, 0x00, 0x00, (byte) 0x8f};
+                bytes[4] = NumberUtils.intToByteArray(userId)[3];
+                bytes[5] = NumberUtils.intToByteArray(userId)[2];
+                bytes[6] = NumberUtils.intToByteArray(userId)[1];
+                bytes[7] = NumberUtils.intToByteArray(userId)[0];
+                Bluetooth28TUtils.INSTANCE.sendtSmallDatas(bytes);//绑定  6E 01 01 4A 00 8F
+                break;
+            case R.id.btn_get_id:
+                Bluetooth28TUtils.INSTANCE.sendtSmallDatas(new byte[]{0x6E, 0x01, 0x04, 0x01, (byte) 0x8F});//ID
                 break;
         }
     }
@@ -147,4 +172,17 @@ public class Test28TActivity extends Activity implements ScanDeviceInterface, Ad
             this.address = address;
         }
     }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        EventBus.getDefault().unregister(this);
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void parseData(ParseDatas datas) {
+        byte data[] = datas.data;
+        Logger.d("", "message == " + NumberUtils.binaryToHexString(data));
+    }
+
 }
