@@ -21,6 +21,7 @@ import android.widget.TextView;
 import com.avater.myapplication.eventbus.ParseDatas;
 import com.avater.myapplication.interfaces.ScanDeviceInterface;
 import com.avater.myapplication.service.Bluetooth28TUtils;
+import com.avater.myapplication.utils.L28TBandUtils;
 import com.avater.myapplication.utils.Logger;
 import com.avater.myapplication.utils.NumberUtils;
 
@@ -88,7 +89,7 @@ public class Test28TActivity extends Activity implements ScanDeviceInterface, Ad
                 Bluetooth28TUtils.INSTANCE.sendtSmallDatas(new byte[]{0x6E, 0x01, 0x03, 0x03, (byte) 0x8F});//软件版本
                 break;
             case R.id.btn_bind:
-                byte[] bytes = null;
+               /* byte[] bytes = null;
                 int userId = 1234;
                 NumberUtils.intToByteArray(userId);
                 bytes = new byte[]{0x6e, 0x01, (byte) 0x4a, 0x01, 0x00, 0x00, 0x00, 0x00, (byte) 0x8f};
@@ -96,7 +97,8 @@ public class Test28TActivity extends Activity implements ScanDeviceInterface, Ad
                 bytes[5] = NumberUtils.intToByteArray(userId)[2];
                 bytes[6] = NumberUtils.intToByteArray(userId)[1];
                 bytes[7] = NumberUtils.intToByteArray(userId)[0];
-                Bluetooth28TUtils.INSTANCE.sendtSmallDatas(bytes);//绑定  6E 01 01 4A 00 8F
+                Bluetooth28TUtils.INSTANCE.sendtSmallDatas(bytes);//绑定  6E 01 01 4A 00 8F*/
+                L28TBandUtils.ISTANCE.sendOrderToDevice(L28TBandUtils.ORDER.SET_DEVICE_UID);
                 break;
             case R.id.btn_get_id:
                 Bluetooth28TUtils.INSTANCE.sendtSmallDatas(new byte[]{0x6E, 0x01, 0x04, 0x01, (byte) 0x8F});//ID
@@ -183,6 +185,19 @@ public class Test28TActivity extends Activity implements ScanDeviceInterface, Ad
     public void parseData(ParseDatas datas) {
         byte data[] = datas.data;
         Logger.d("", "message == " + NumberUtils.binaryToHexString(data));
+        if (data.length == 6 && data[0] == 0x6e && data[3] == (byte) 0x4a) {
+            Logger.d("", "设置UID成功");
+            L28TBandUtils.ISTANCE.sendOrderToDevice(L28TBandUtils.ORDER.GET_DEVICE_ID);
+        } else if (data.length == 24 && data[data.length - 1] == (byte) 0x8F) {
+            Logger.d("", "获取ID成功");
+            L28TBandUtils.ISTANCE.sendOrderToDevice(L28TBandUtils.ORDER.SET_USER_INFO);
+        } else if (data.length == 6 && data[3] == (byte) 0x12) {
+            Logger.d("", "设置个人信息成功");
+            L28TBandUtils.ISTANCE.sendOrderToDevice(L28TBandUtils.ORDER.SET_TIME);
+        } else if (data.length == 6 && data[3] == (byte) 0x15) {
+            Logger.d("", "设置时间成功，绑定流程结束");
+            L28TBandUtils.ISTANCE.setBindOver();
+        }
     }
 
 }

@@ -21,6 +21,7 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.avater.myapplication.AppContext;
+import com.avater.myapplication.eventbus.DeviceState;
 import com.avater.myapplication.eventbus.ParseDatas;
 import com.avater.myapplication.utils.BluetoothCommandConstant;
 import com.avater.myapplication.utils.Logger;
@@ -99,6 +100,10 @@ public class BlueTooth28TService extends Service {
         if (mBluetoothDevice != null && mBluetoothGatt != null) {
             BluetoothGattCharacteristic bgc = null;
             try {
+                BluetoothGattService service = mBluetoothGatt.getService(UUID_SERVICE_BASE);
+                if (service == null) {
+                    mBluetoothGatt = mBluetoothDevice.connectGatt(BlueTooth28TService.this, false, gattCallback);
+                }
                 bgc = mBluetoothGatt.getService(UUID_SERVICE_BASE).getCharacteristic(UUID_CHARACTERISTIC_8001);
                 bgc.setValue(data);
             } catch (Exception e) {
@@ -184,6 +189,7 @@ public class BlueTooth28TService extends Service {
         }
     }
 
+
     private BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         // 连接：状态回调
         @Override
@@ -203,15 +209,40 @@ public class BlueTooth28TService extends Service {
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
-            } else if ((status == 133) && (newState == 2)) {//连接失败的回调
+            } else if ((status == 133) && (newState == 0)) {
+                if (mBluetoothGatt != null) {
+                    mBluetoothGatt.close();
+                    mBluetoothGatt.disconnect();
+                }
                 Log.e(TAG, "连接失败的回调");
                 isConnect = false;
-                // TODO: 2018/11/21  继续连接
+                connect(mBluetoothDevice.getAddress());
+                EventBus.getDefault().post(new DeviceState(-1, "设备断开了"));
+            } else if ((status == 133) && (newState == 2)) {//连接失败的回调
+                if (mBluetoothGatt != null) {
+                    mBluetoothGatt.close();
+                    mBluetoothGatt.disconnect();
+                }
+                Log.e(TAG, "连接失败的回调");
+                isConnect = false;
+                connect(mBluetoothDevice.getAddress());
+                EventBus.getDefault().post(new DeviceState(-1, "设备断开了"));
             } else if (status == 8 && newState == 0) {
-
+                if (mBluetoothGatt != null) {
+                    mBluetoothGatt.close();
+                    mBluetoothGatt.disconnect();
+                }
+                connect(mBluetoothDevice.getAddress());
+                EventBus.getDefault().post(new DeviceState(-1, "设备断开了"));
             } else if (status == 19 && newState == 0) {
-
+                if (mBluetoothGatt != null) {
+                    mBluetoothGatt.close();
+                    mBluetoothGatt.disconnect();
+                }
+                connect(mBluetoothDevice.getAddress());
+                EventBus.getDefault().post(new DeviceState(-1, "设备断开了"));
             } else if (newState == 2 && status == 0) {//已经连接
+                EventBus.getDefault().post(new DeviceState(0, "设备正在连接"));
                 Log.e(TAG, "==>>1.已经连接");
                 isConnect = true;
                 mBluetoothGatt.discoverServices();
@@ -257,14 +288,11 @@ public class BlueTooth28TService extends Service {
                     System.arraycopy(lastPacket, 0, newbyte, 0, 20);
                     System.arraycopy(value, 0, newbyte, 20, value.length);
                     Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(newbyte));
-//                    broadcastUpdate(ACTION_DATA_AVAILABLE, newbyte);
                     parseComingDatas(newbyte);
                     lastPacket = null;
                 } else {
                     if ((value != null) & (value.length == 20)) {
-                        if ((value[0] == 0x6e) && (value[1] == 0x01)  //L28H 有2个命令需要分包处理
-//								&& ( (abyte0[2] == 0x04) || (abyte0[2] == 0x05)   )) {
-                                && ((value[2] == 0x03) || (value[2] == 0x04) || (value[2] == 0x05))) {
+                        if ((value[0] == 0x6e) && (value[1] == 0x01) && ((value[2] == 0x03) || (value[2] == 0x04) || (value[2] == 0x05))) {
                             lastPacket = new byte[20];
                             System.arraycopy(value, 0, lastPacket, 0, 20);
                             Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(value));
@@ -274,7 +302,6 @@ public class BlueTooth28TService extends Service {
                         lastPacket = null;
                     }
                     Logger.d("", "接收的数据 == " + NumberUtils.binaryToHexString(value));
-//                    filterBleData(value);
                     parseComingDatas(value);
                 }
             }
@@ -286,7 +313,7 @@ public class BlueTooth28TService extends Service {
                     EventBus.getDefault().post(new ParseDatas(data));
                 } else {
                     byte last = data[data.length - 1];
-                    if (last == 0x8F) {
+                    if (last == (byte) 0x8F) {
                         EventBus.getDefault().post(new ParseDatas(data));
                     } else {
                         Logger.d("", "大字节数据还没有接收完毕，将继续接收");
@@ -302,6 +329,7 @@ public class BlueTooth28TService extends Service {
         public void onDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
             Log.e(TAG, "==>>onDescriptorRead( )");
             Log.e(TAG, "==>>onDescriptorRead( ) ==>>4、连接完毕 （onDescriptorRead，发送Discovered广播）");
+            EventBus.getDefault().post(new DeviceState(1, "设备已经连接"));
             if (UUID_CONFIG_DESCRIPTOR.equals(descriptor.getUuid())) {
 
             }
@@ -347,6 +375,61 @@ public class BlueTooth28TService extends Service {
             }
         }
     };
+
+    public boolean connect() {
+        BluetoothDevice bluetoothDevice = null;
+        if (mBluetoothDevice != null) {
+            bluetoothDevice = mBluetoothDevice;
+        }
+        String macAddress = mBluetoothDevice.getAddress();
+        Log.d("connect--", "--");
+        try {
+            Log.d("connect--", "--根据Mac在蓝牙适配器中获取该对象");
+            bluetoothDevice = mBluetoothAdapter.getRemoteDevice(macAddress);
+            mBluetoothDevice = mBluetoothAdapter.getRemoteDevice(macAddress);
+        } catch (IllegalArgumentException e) {
+            Log.d("connect--", "--根据Mac在蓝牙出现异常");
+            e.printStackTrace();
+            return false;
+        }
+        if (mBluetoothAdapter == null || bluetoothDevice == null) {
+            Log.d("connect--", "--根据Mac获取蓝牙对象失败，返回");
+            return false;
+        } else {
+            Log.d("connect--", "--根据Mac在蓝牙获取成功！！");
+            if (bluetoothDevice != null && !TextUtils.isEmpty(macAddress)) {
+                Log.d("connect--", "--");
+                Set<BluetoothDevice> bluetoothDeviceSet = mBluetoothAdapter.getBondedDevices();
+                boolean isPair = false;
+                for (BluetoothDevice pb : bluetoothDeviceSet) {
+                    Log.e(TAG, "--------deviceName : " + pb.getName());
+                    if (pb.getAddress().equals(macAddress)) {
+                        Log.d(TAG, "--------pb.getAddress() = " + pb.getAddress() + ", macAddress = " + macAddress + "");
+                        Log.d(TAG, "--------deviceName : 需要进行配对！= " + pb.getName());
+                        isPair = true;
+                    }
+                }
+//                if (bluetoothDevice.getBondState() == BluetoothDevice.BOND_NONE) {
+//                    Log.e("connect--", "--进行配对");
+//                    try {
+//                        Method method = BluetoothDevice.class.getMethod("createBond");
+//                        method.invoke(bluetoothDevice);
+//                    } catch (Exception e) {
+//                        e.printStackTrace();
+//                    }
+//                }
+//                if (!isPair && Build.VERSION.SDK_INT >= 19) {
+//                    Log.e("connect--", "--进行配对");
+//                    bluetoothDevice.createBond();
+//                }
+                mBluetoothGatt = bluetoothDevice.connectGatt(BlueTooth28TService.this, Build.VERSION.SDK_INT < 19, gattCallback);
+                return true;
+            } else {
+                Log.d("connect--", "--");
+                return false;
+            }
+        }
+    }
 
     public boolean connect(String macAddress) {
         BluetoothDevice bluetoothDevice = null;

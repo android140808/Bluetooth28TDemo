@@ -12,6 +12,7 @@ import android.text.TextUtils;
 
 
 import com.avater.myapplication.interfaces.ScanDeviceInterface;
+import com.avater.myapplication.utils.L28TBandUtils;
 import com.avater.myapplication.utils.Logger;
 
 import java.util.LinkedList;
@@ -34,6 +35,7 @@ public enum Bluetooth28TUtils {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             mBlueTooth28TService = ((BlueTooth28TService.MyBinder) service).getService();
+            L28TBandUtils.ISTANCE.init(mContext, mBlueTooth28TService);
         }
 
         @Override
